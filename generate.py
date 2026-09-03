@@ -19,7 +19,7 @@ DOMAIN_SUFFIX = ".v642.com"
 SUBDOMAIN_LEN = 5          # 随机子域名字母位数
 LINK_COUNT = 100           # 生成链接数量
 
-OUTPUT_DIR = "dot"
+OUTPUT_DIR = "docs"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "index.html")
 
 # SEO 相关
