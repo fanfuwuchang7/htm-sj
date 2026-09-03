@@ -1,0 +1,38 @@
+name: Update Links
+
+# 触发条件：每天 UTC 0 点自动运行 + 支持手动触发
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+# 赋予工作流写入仓库内容的权限
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 拉取仓库代码
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # 2. 配置 Python 环境
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      # 3. 运行生成脚本（输出到 dot/index.html）
+      - name: Generate HTML
+        run: python generate.py
+
+      # 4. 提交并推送变更
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add dot/index.html
+          git commit -m "chore: update dot/index.html [skip ci]" || exit 0
+          git push
