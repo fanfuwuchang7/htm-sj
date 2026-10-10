@@ -1224,10 +1224,14 @@ def run(mode: str, do_print: bool = False, source: Optional[str] = None, offline
         dash_path = save_dashboard(html, result)
     # 看板文件作为附件一并发送，收件人可直接打开完整报告
     attach = [dash_path] if dash_path else None
+    ok = True
     if mode in {"intraday", "both"}:
-        send_email(f"[盘中] ETF题材扫描 {result.generated_at}", html, attachments=attach)
+        ok = send_email(f"[盘中] ETF题材扫描 {result.generated_at}", html, attachments=attach) and ok
     if mode in {"close", "both"}:
-        send_email(f"[盘后] ETF题材扫描 {result.generated_at}", html, attachments=attach)
+        ok = send_email(f"[盘后] ETF题材扫描 {result.generated_at}", html, attachments=attach) and ok
+    if not ok:
+        logger.error("邮件发送存在失败，请检查 Secrets / 邮箱配置")
+        return 1
     return 0
 
 
