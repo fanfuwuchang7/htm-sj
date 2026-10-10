@@ -1,38 +1,73 @@
-name: Update Links
+name: ETF 题材风口扫描
 
-# 触发条件：每天 UTC 0 点自动运行 + 支持手动触发
 on:
   schedule:
-    - cron: "0 0 * * *"
-  workflow_dispatch:
+    # cron 使用 UTC 时间，比北京时间(UTC+8)晚 8 小时
+    # 免费版 cron 可能延迟数分钟，属正常现象
+    - cron: '35 3 * * 1-5'   # 北京 11:35 盘中
+    - cron: '10 7 * * 1-5'   # 北京 15:10 盘后
+  workflow_dispatch:         # 允许在 GitHub 网页手动触发
+    inputs:
+      mode:
+        description: 扫描模式（手动触发时生效）
+        required: true
+        default: close
+        type: choice
+        options:
+          - intraday
+          - close
 
-# 赋予工作流写入仓库内容的权限
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      # 1. 拉取仓库代码
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-      # 2. 配置 Python 环境
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: 配置 Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
-      # 3. 运行生成脚本（输出到 dot/index.html）
-      - name: Generate HTML
-        run: python generate.py
-
-      # 4. 提交并推送变更
-      - name: Commit and Push
+      - name: 安装依赖
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add docs/index.html
-          git commit -m "chore: update dot/index.html [skip ci]" || exit 0
-          git push
+          python -m pip install --upgrade pip
+          pip install akshare pandas numpy requests
+
+      - name: 执行扫描并发送报告
+        env:
+          # 凭证统一由仓库 Secrets 注入，避免明文入库
+          # 环境变量优先级高于脚本内 EMAIL_CONFIG
+          SMTP_HOST: smtp.qq.com
+          SMTP_PORT: '465'
+          SMTP_USE_SSL: 'true'
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.SMTP_USER }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          # 手动触发时用输入的模式；定时触发则由 UTC 时间推断
+          MODE="${{ github.event.inputs.mode }}"
+          if [ -z "$MODE" ]; then
+            HM=$(date -u +%H%M)
+            if [ "$HM" -lt "0700" ]; then
+              MODE=intraday   # UTC 03:35 → 北京 11:35 盘中
+            else
+              MODE=close      # UTC 07:10 → 北京 15:10 盘后
+            fi
+          fi
+          echo "UTC 现在=$(date -u '+%F %T')  模式=$MODE"
+          python etf_theme_scanner.py --mode "$MODE"
+
+      - name: 上传看板 HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: etf-report-run${{ github.run_number }}
+          path: docs/index.html
+          if-no-files-found: ignore
